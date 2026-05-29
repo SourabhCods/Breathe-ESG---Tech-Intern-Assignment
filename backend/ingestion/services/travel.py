@@ -106,7 +106,14 @@ class CorporateTravelProcessor(BaseIngestionProcessor):
         if raw_travel_type == "ground_transport":
             raw_travel_type = "ground"
             
-        raw_date = raw_data.get("Travel_Date") or raw_data.get("Start_Date") or raw_data.get("Date") or raw_data.get("_extract_timestamp") or ""
+        raw_date = (
+            raw_data.get("Travel_Date") or
+            raw_data.get("Start_Date") or
+            raw_data.get("Date") or
+            raw_data.get("booking_date") or
+            raw_data.get("booking_dt") or
+            raw_data.get("_extract_timestamp") or ""
+        )
         raw_cost = raw_data.get("spend") or raw_data.get("Cost") or raw_data.get("Amount") or ""
         raw_currency = raw_data.get("currency") or raw_data.get("Currency") or "EUR"
 

@@ -353,3 +353,200 @@ def edit_row(request: Request, row_id: int) -> Response:
 
     serializer = NormalizedRowSerializer(activity)
     return Response(serializer.data)
+
+
+import csv
+from django.http import HttpResponse
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def bulk_approve(request: Request) -> Response:
+    """
+    Approves multiple normalized rows in a single atomic transaction.
+    """
+    try:
+        organization = get_tenant_organization(request)
+    except ValidationError as err:
+        return Response({"error": str(err)}, status=400)
+
+    row_ids = request.data.get("row_ids")
+    if not row_ids or not isinstance(row_ids, list):
+        return Response({"error": "Missing or invalid list parameter 'row_ids'"}, status=400)
+
+    approved_count = 0
+    with transaction.atomic():
+        activities = NormalizedEmissionActivity.objects.filter(
+            id__in=row_ids,
+            organization=organization
+        )
+        for activity in activities:
+            if not activity.is_locked:
+                activity.status = "APPROVED"
+                activity.save()  # sets is_locked = True
+                AuditLog.objects.create(
+                    activity=activity,
+                    user=request.user if request.user.is_authenticated else None,
+                    action="APPROVED",
+                    comment="Bulk approved and locked."
+                )
+                approved_count += 1
+
+    return Response({
+        "message": f"Successfully approved and locked {approved_count} records.",
+        "approved_ids": row_ids
+    })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def bulk_reject(request: Request) -> Response:
+    """
+    Rejects multiple normalized rows in a single atomic transaction.
+    """
+    try:
+        organization = get_tenant_organization(request)
+    except ValidationError as err:
+        return Response({"error": str(err)}, status=400)
+
+    row_ids = request.data.get("row_ids")
+    if not row_ids or not isinstance(row_ids, list):
+        return Response({"error": "Missing or invalid list parameter 'row_ids'"}, status=400)
+
+    rejected_count = 0
+    with transaction.atomic():
+        activities = NormalizedEmissionActivity.objects.filter(
+            id__in=row_ids,
+            organization=organization
+        )
+        for activity in activities:
+            if not activity.is_locked:
+                activity.status = "REJECTED"
+                activity.save()
+                AuditLog.objects.create(
+                    activity=activity,
+                    user=request.user if request.user.is_authenticated else None,
+                    action="REJECTED",
+                    comment="Bulk rejected."
+                )
+                rejected_count += 1
+
+    return Response({
+        "message": f"Successfully rejected {rejected_count} records.",
+        "rejected_ids": row_ids
+    })
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def export_audit_trail_csv(request: Request) -> HttpResponse:
+    """
+    Generates a certified CSV report containing the complete audit logs of modifications and reviews.
+    Ready to be sent to external sustainability compliance auditors.
+    """
+    try:
+        organization = get_tenant_organization(request)
+    except ValidationError as err:
+        return HttpResponse(str(err), status=400, content_type="text/plain")
+
+    # Set up HTTP Response with CSV headers
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="audit_trail_{organization.slug}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        "Log_ID",
+        "Activity_ID",
+        "GHG_Scope",
+        "Activity_Type",
+        "Action",
+        "Field_Modified",
+        "Old_Value",
+        "New_Value",
+        "Uploader_Username",
+        "Timestamp",
+        "Comment"
+    ])
+
+    logs = AuditLog.objects.filter(
+        activity__organization=organization
+    ).order_by("-timestamp")
+
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.activity.id,
+            log.activity.ghg_scope,
+            log.activity.activity_type,
+            log.action,
+            log.field_modified or "N/A",
+            log.old_value or "N/A",
+            log.new_value or "N/A",
+            log.user.username if log.user else "System",
+            log.timestamp.isoformat(),
+            log.comment or ""
+        ])
+
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def export_normalized_ledger_csv(request: Request) -> HttpResponse:
+    """
+    Generates a CSV report of all normalized emission activity records for tenant compliance audit.
+    """
+    try:
+        organization = get_tenant_organization(request)
+    except ValidationError as err:
+        return HttpResponse(str(err), status=400, content_type="text/plain")
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="normalized_ledger_{organization.slug}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        "Activity_ID",
+        "GHG_Scope",
+        "Activity_Type",
+        "Facility_Name",
+        "Plant_Code",
+        "Start_Date",
+        "End_Date",
+        "Normalized_Quantity",
+        "Normalized_Unit",
+        "Normalized_Cost",
+        "Currency",
+        "Status",
+        "Original_Quantity",
+        "Original_Unit",
+        "Original_Cost",
+        "Is_Locked",
+        "Created_At"
+    ])
+
+    activities = NormalizedEmissionActivity.objects.filter(
+        organization=organization
+    ).order_by("-created_at")
+
+    for act in activities:
+        writer.writerow([
+            act.id,
+            act.ghg_scope,
+            act.activity_type,
+            act.facility.facility_name if act.facility else "N/A",
+            act.facility.plant_code if act.facility else "N/A",
+            act.start_date.isoformat(),
+            act.end_date.isoformat(),
+            str(act.quantity),
+            act.unit,
+            str(act.cost) if act.cost else "N/A",
+            act.currency,
+            act.status,
+            str(act.original_quantity) if act.original_quantity is not None else "N/A",
+            act.original_unit or "N/A",
+            str(act.original_cost) if act.original_cost is not None else "N/A",
+            str(act.is_locked),
+            act.created_at.isoformat()
+        ])
+
+    return response

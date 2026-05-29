@@ -107,8 +107,9 @@ class NormalizedRowSerializer(serializers.ModelSerializer):
         if obj.activity_type == "fuel":
             return {
                 "plant": meta.get("sap_plant_code"),
-                "cost": str(obj.cost) if obj.cost else None,
+                "quantity": str(obj.quantity),
                 "unit": obj.unit,
+                "cost": str(obj.cost) if obj.cost else None,
                 "vendor": meta.get("vendor_name"),
                 "vehicle_id": meta.get("vehicle_id")
             }
@@ -117,6 +118,7 @@ class NormalizedRowSerializer(serializers.ModelSerializer):
                 "facility": obj.facility.facility_name if obj.facility else meta.get("sap_plant_code"),
                 "billing_start": obj.start_date.isoformat() if obj.start_date else None,
                 "billing_end": obj.end_date.isoformat() if obj.end_date else None,
+                "consumption": str(obj.quantity),
                 "consumption_unit": obj.unit,
                 "provider": meta.get("provider"),
                 "cost": str(obj.cost) if obj.cost else None,

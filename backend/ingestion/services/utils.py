@@ -186,6 +186,7 @@ def parse_date(date_str: str) -> Tuple[Optional[date], List[str]]:
         "%Y%m%d",    # Raw SAP compressed format e.g., 20260512
         "%d-%b-%Y",  # Month abbreviation e.g., 01-MAY-2026
         "%d-%B-%Y",  # Full month name e.g., 01-May-2026
+        "%d-%m-%Y",  # Dash format e.g., 10-05-2026
     ]
 
     for fmt in formats:

@@ -507,3 +507,139 @@ class ESGNormalizationPipelineTestCase(TestCase):
         # Deletions of AuditLogs must fail
         with self.assertRaises(ValidationError):
             log.delete()
+
+    def test_advanced_messy_utility_parser(self) -> None:
+        """
+        Tests the dynamic semicolon delimiter detection, header normalization (uppercase),
+        and parsing of European decimal values and dash-based date formats.
+        """
+        processor = IngestionProcessorFactory.get_processor("utility")
+
+        raw_row = {
+            "ACCOUNT_ID": "ACC-44102-CA",
+            "METER_REF": "MTR-9921X",
+            "BILL_START": "15.05.2026",
+            "BILL_END": "14.06.2026",
+            "READ_TYPE": "ACTUAL",
+            "ACTIVE_PEAK_KWH": "34000,00",
+            "ACTIVE_OFFPEAK_KWH": "55000,00",
+            "REACTIVE_KVAH": "9100",
+            "DEMAND_KW": "210,0",
+            "RATE_CODE": "TOU-8-CRITICAL",
+            "TOTAL_CHARGES": "12450,75",
+            "CURRENCY": "USD",
+            "FACILITY_ID": "FAC-LA-02"
+        }
+
+        csv_payload = (
+            "ACCOUNT_ID;BILL_START;BILL_END;ACTIVE_PEAK_KWH;ACTIVE_OFFPEAK_KWH;TOTAL_CHARGES;CURRENCY;FACILITY_ID\n"
+            "ACC-44102-CA;15.05.2026;14.06.2026;34000,00;55000,00;12450,75;USD;FAC-LA-02"
+        )
+
+        parsed_rows = processor.parse_source(csv_payload)
+        self.assertEqual(len(parsed_rows), 1)
+        self.assertEqual(parsed_rows[0]["ACCOUNT_ID"], "ACC-44102-CA")
+
+        staging_row = StagingRow.objects.create(
+            organization=self.org_alpha,
+            source_type="utility",
+            raw_data=parsed_rows[0]
+        )
+
+        activities = processor.process(staging_row)
+        self.assertEqual(len(activities), 2)
+        
+        may_split = activities[0]
+        self.assertEqual(may_split.start_date, date(2026, 5, 15))
+        self.assertEqual(may_split.end_date, date(2026, 5, 31))
+        self.assertAlmostEqual(float(may_split.quantity), 48806.451613, places=2)
+        self.assertAlmostEqual(float(may_split.cost), 6827.83, places=2)
+
+    def test_bulk_actions_and_exports(self) -> None:
+        """
+        Tests the API endpoints for bulk approval, bulk rejection,
+        and certified CSV exports for compliance auditors.
+        """
+        staging_row = StagingRow.objects.create(
+            organization=self.org_alpha,
+            source_type="sap",
+            raw_data={}
+        )
+
+        act1 = NormalizedEmissionActivity.objects.create(
+            organization=self.org_alpha,
+            staging_row=staging_row,
+            ghg_scope="Scope 1",
+            activity_type="fuel",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 1),
+            quantity=Decimal("100.0"),
+            unit="L"
+        )
+
+        act2 = NormalizedEmissionActivity.objects.create(
+            organization=self.org_alpha,
+            staging_row=staging_row,
+            ghg_scope="Scope 2",
+            activity_type="electricity",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 1),
+            quantity=Decimal("200.0"),
+            unit="kWh"
+        )
+
+        from django.test import Client
+        client = Client()
+
+        # 1. Test Bulk Approve
+        response = client.post(
+            "/api/rows/bulk-approve/",
+            data={"row_ids": [act1.id, act2.id]},
+            content_type="application/json",
+            HTTP_X_TENANT_ID=str(self.org_alpha.id)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NormalizedEmissionActivity.objects.get(id=act1.id).status, "APPROVED")
+        self.assertEqual(NormalizedEmissionActivity.objects.get(id=act2.id).status, "APPROVED")
+
+        # 2. Test Bulk Reject
+        act3 = NormalizedEmissionActivity.objects.create(
+            organization=self.org_alpha,
+            staging_row=staging_row,
+            ghg_scope="Scope 3",
+            activity_type="travel",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 1),
+            quantity=Decimal("300.0"),
+            unit="km"
+        )
+        response_reject = client.post(
+            "/api/rows/bulk-reject/",
+            data={"row_ids": [act3.id]},
+            content_type="application/json",
+            HTTP_X_TENANT_ID=str(self.org_alpha.id)
+        )
+        self.assertEqual(response_reject.status_code, 200)
+        self.assertEqual(NormalizedEmissionActivity.objects.get(id=act3.id).status, "REJECTED")
+
+        # 3. Test Export Normalized CSV
+        response_export = client.get(
+            "/api/export-normalized/",
+            HTTP_X_TENANT_ID=str(self.org_alpha.id)
+        )
+        self.assertEqual(response_export.status_code, 200)
+        self.assertEqual(response_export["Content-Type"], "text/csv")
+        content = response_export.content.decode("utf-8")
+        self.assertIn("Activity_ID", content)
+        self.assertIn("Scope 1", content)
+
+        # 4. Test Export Audit CSV
+        response_audit = client.get(
+            "/api/export-audit/",
+            HTTP_X_TENANT_ID=str(self.org_alpha.id)
+        )
+        self.assertEqual(response_audit.status_code, 200)
+        self.assertEqual(response_audit["Content-Type"], "text/csv")
+        audit_content = response_audit.content.decode("utf-8")
+        self.assertIn("Log_ID", audit_content)
+        self.assertIn("Bulk approved and locked.", audit_content)

@@ -4,7 +4,11 @@ from ingestion.views import (
     get_rows,
     approve_row,
     reject_row,
-    edit_row
+    edit_row,
+    bulk_approve,
+    bulk_reject,
+    export_audit_trail_csv,
+    export_normalized_ledger_csv
 )
 
 urlpatterns = [
@@ -13,4 +17,8 @@ urlpatterns = [
     path("api/rows/<int:row_id>/approve/", approve_row),
     path("api/rows/<int:row_id>/reject/", reject_row),
     path("api/rows/<int:row_id>/edit/", edit_row),
+    path("api/rows/bulk-approve/", bulk_approve),
+    path("api/rows/bulk-reject/", bulk_reject),
+    path("api/export-audit/", export_audit_trail_csv),
+    path("api/export-normalized/", export_normalized_ledger_csv),
 ]
