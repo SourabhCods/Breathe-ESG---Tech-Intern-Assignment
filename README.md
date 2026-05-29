@@ -73,7 +73,7 @@ I designed and engineered the following capabilities across the full stack:
 ### Running Automated Tests
 I wrote a unit test suite to verify the core algorithms. To execute these tests, run:
 ```bash
-venv\Scripts\python manage.py test
+venv\Scripts\python manage.py test ingestion
 ```
 
 ---
