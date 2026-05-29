@@ -4,9 +4,10 @@ import axios from "axios";
 function DashboardPage({ setSelectedRow, setPage }) {
   const [rows, setRows] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const fetchRows = async () => {
-    const res = await axios.get("http://localhost:8000/api/rows/", {
+    const res = await axios.get(`${API_URL}/api/rows/`, {
       headers: {
         "X-Tenant-ID": "breathe-esg-default",
       },
@@ -21,7 +22,7 @@ function DashboardPage({ setSelectedRow, setPage }) {
 
   const approveRow = async (id) => {
     await axios.post(
-      `http://localhost:8000/api/rows/${id}/approve/`,
+      `${API_URL}/api/rows/${id}/approve/`,
       {},
       {
         headers: {
@@ -34,7 +35,7 @@ function DashboardPage({ setSelectedRow, setPage }) {
 
   const rejectRow = async (id) => {
     await axios.post(
-      `http://localhost:8000/api/rows/${id}/reject/`,
+      `${API_URL}/api/rows/${id}/reject/`,
       {},
       {
         headers: {
@@ -49,7 +50,7 @@ function DashboardPage({ setSelectedRow, setPage }) {
     if (selectedIds.length === 0) return;
     try {
       await axios.post(
-        "http://localhost:8000/api/rows/bulk-approve/",
+        `${API_URL}/api/rows/bulk-approve/`,
         { row_ids: selectedIds },
         {
           headers: {
@@ -67,7 +68,7 @@ function DashboardPage({ setSelectedRow, setPage }) {
     if (selectedIds.length === 0) return;
     try {
       await axios.post(
-        "http://localhost:8000/api/rows/bulk-reject/",
+        `${API_URL}/api/rows/bulk-reject/`,
         { row_ids: selectedIds },
         {
           headers: {
@@ -83,7 +84,7 @@ function DashboardPage({ setSelectedRow, setPage }) {
 
   const handleExport = async (endpoint, filename) => {
     try {
-      const res = await axios.get(`http://localhost:8000/api/${endpoint}/`, {
+      const res = await axios.get(`${API_URL}/api/${endpoint}/`, {
         headers: {
           "X-Tenant-ID": "breathe-esg-default",
         },
