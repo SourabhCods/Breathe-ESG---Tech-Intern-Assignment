@@ -550,3 +550,19 @@ def export_normalized_ledger_csv(request: Request) -> HttpResponse:
         ])
 
     return response
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health_check(request: Request) -> Response:
+    """
+    Returns system diagnostic details for verifying ALLOWED_HOSTS and request routing.
+    """
+    from django.conf import settings
+    return Response({
+        "status": "ok",
+        "debug": settings.DEBUG,
+        "allowed_hosts": settings.ALLOWED_HOSTS,
+        "host": request.get_host(),
+        "x_forwarded_host": request.headers.get("X-Forwarded-Host"),
+    })

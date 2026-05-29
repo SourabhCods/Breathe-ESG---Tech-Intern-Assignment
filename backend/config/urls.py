@@ -8,7 +8,8 @@ from ingestion.views import (
     bulk_approve,
     bulk_reject,
     export_audit_trail_csv,
-    export_normalized_ledger_csv
+    export_normalized_ledger_csv,
+    health_check
 )
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
     path("api/rows/bulk-reject/", bulk_reject),
     path("api/export-audit/", export_audit_trail_csv),
     path("api/export-normalized/", export_normalized_ledger_csv),
+    path("api/health/", health_check),
 ]
