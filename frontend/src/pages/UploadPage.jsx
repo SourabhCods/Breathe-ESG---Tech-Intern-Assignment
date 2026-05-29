@@ -17,7 +17,7 @@ function UploadPage() {
     formData.append("file", file);
     formData.append("source_type", sourceType);
 
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
     await axios.post(`${API_URL}/api/upload/`, formData, {
       headers: {
         "X-Tenant-ID": "breathe-esg-default",

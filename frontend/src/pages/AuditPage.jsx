@@ -9,7 +9,7 @@ function AuditPage() {
   }, []);
 
   const fetchApprovedRows = async () => {
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+    const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
     const res = await axios.get(`${API_URL}/api/rows/`, {
       headers: {
         "X-Tenant-ID": "breathe-esg-default",
